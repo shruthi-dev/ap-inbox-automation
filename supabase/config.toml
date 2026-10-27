@@ -1,0 +1,8 @@
+# Supabase project config for AP Inbox Triage.
+# `supabase link --project-ref <ref>` connects this folder to your hosted project.
+project_id = "ap-inbox-triage"
+
+[functions.triage]
+# The scheduler calls this function without a user token; the function checks
+# the x-cron-secret header for scheduled calls and the user's token for "Run now".
+verify_jwt = false
