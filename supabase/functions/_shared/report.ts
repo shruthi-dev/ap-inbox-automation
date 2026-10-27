@@ -23,6 +23,7 @@ export interface ReportItem {
 
 export interface ReportInput {
   dateLabel: string;
+  client: string;
   mailbox: string;
   periodLabel: string;
   trigger: "schedule" | "manual";
@@ -52,7 +53,7 @@ const TH = "padding:8px 10px;border-bottom:2px solid #b9c4be;background:#f4f6f4;
 export function reportSubject(r: ReportInput): string {
   const open = r.items.reduce((a, i) => a + (i.amount ?? 0), 0);
   const past = r.items.filter((i) => i.past_due).length;
-  let s = `AP Triage ${r.dateLabel} — ${r.items.length} action${r.items.length === 1 ? "" : "s"} · ${money(open).replace("&mdash;", "$0.00")} open`;
+  let s = `AP Triage · ${r.client} · ${r.dateLabel} — ${r.items.length} action${r.items.length === 1 ? "" : "s"} · ${money(open).replace("&mdash;", "$0.00")} open`;
   if (past) s += ` · ${past} past due`;
   return (r.trigger === "manual" ? "[Manual] " : "") + s;
 }
@@ -102,7 +103,7 @@ export function buildReportHtml(r: ReportInput): string {
   const ignored = Object.entries(r.ignored).map(([k, v]) => `${esc(k)} (${v})`).join(", ");
 
   return `<div style="font-family:Segoe UI,Arial,sans-serif;color:#17201c;font-size:14px;line-height:1.5;max-width:960px;">
-  <h2 style="font-size:20px;margin:0 0 4px;">AP Inbox Triage — ${esc(r.dateLabel)}</h2>
+  <h2 style="font-size:20px;margin:0 0 4px;">${esc(r.client)} — AP inbox summary, ${esc(r.dateLabel)}</h2>
   <p style="margin:0 0 16px;color:#5b6862;">Mailbox ${esc(r.mailbox)} · ${esc(r.periodLabel)} · Reviewed ${r.reviewed} emails (AP ${r.apCount}) · ${r.trigger === "manual" ? "Manual run" : "Scheduled run"}</p>
   <h3 style="font-size:15px;margin:0 0 8px;">Summary</h3>
   ${r.items.length ? `<table cellpadding="0" cellspacing="0" style="border-collapse:collapse;width:100%;font-size:14px;">

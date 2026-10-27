@@ -1,6 +1,6 @@
 # AP Inbox Triage (Supabase)
 
-A standalone version of the AP Inbox Triage. It reads an Outlook mailbox through Microsoft Graph, uses Claude to read each AP email and its PDFs, emails a prioritised report, and keeps settings and run history in Supabase. The console lets people set the schedule, press **Run now**, review runs and track the rollout.
+A standalone version of the AP Inbox Triage. It reads an Outlook mailbox through Microsoft Graph, uses Claude to read each AP email and its PDFs, emails a prioritised report, and keeps settings and run history in Supabase. The console (AP Inbox Assistant) handles several **clients**, each with its own mailbox, schedule, recipients, Smart AP routing, history and people with access.
 
 The Claude Code skill in `C:\claude\claudeSkill` is untouched and keeps working on its own. This project reuses its triage rules (see `supabase/functions/_shared/rules.ts`).
 
@@ -10,8 +10,8 @@ No Docker is needed. Everything deploys to your hosted Supabase project with `np
 
 | Part | Where | What it does |
 |---|---|---|
-| Database | `supabase/migrations/…_init.sql` | `settings` (one row), `runs`, `run_items`, `tracker_items`, `app_users`, with row-level security so only listed users can read or change anything |
-| Scheduler | `supabase/migrations/…_scheduler.sql` | `pg_cron` calls the function every 5 minutes; the function runs only when the console's schedule says so |
+| Database | `supabase/migrations/…_init.sql` | `clients` (one row per client: mailbox, schedule, recipients, Smart AP), `client_users` (who can see each client), `runs`, `run_items`, `tracker_items`, `app_users`. Row-level security: people see only the clients they're assigned to; admins see all and manage clients and access (`…_clients.sql`) |
+| Scheduler | `supabase/migrations/…_scheduler.sql` | `pg_cron` calls the function every 5 minutes; each call starts the next client whose schedule is due (one client per call, within 2 hours of its run time) |
 | Runner | `supabase/functions/triage/` | Lists the inbox for the look-back window, asks Claude which emails are AP, reads each one (body + PDFs) with Claude, checks statement invoices against the mailbox, optionally forwards invoices to Smart AP, emails the report, saves the run |
 | Console | `web/` | Static page: Microsoft or email-link sign-in, Overview, Schedule, Run history, Rollout |
 
@@ -72,13 +72,15 @@ Put your project URL and **anon public key** (Project Settings → API) into `we
 
 ## First run
 
-1. Sign in, open **Schedule**, and fill in:
-   - **Mailbox to check:** your mailbox, or the shared AP mailbox.
-   - **Report recipients:** you.
+1. Sign in as an admin. Pick a client at the top, or press **+ Add client**, then open **Settings** and fill in:
+   - **Client name.**
+   - **Mailbox to check:** the client's AP mailbox. IT must include it in the app's access policy.
+   - **Send the summary to:** you.
    - **Run time, days and time zone.**
    - **Smart AP address**, if you have it. Leave **auto-forward off** until you've checked a few reports.
-2. **Save**, then go to **Overview → Run now**. The report arrives by email, and the run appears in **Run history**.
-3. When the reports look right, tick **Run the triage on a schedule**.
+2. **Save**. Under **People with access**, add the colleagues who should see this client (they can sign in straight away).
+3. Go to **Summary → Check inbox now**. The summary arrives by email, and the check appears in **History**.
+4. When the summaries look right, tick **Check the inbox automatically**.
 
 ## Limits and costs
 
@@ -86,7 +88,8 @@ Put your project URL and **anon public key** (Project Settings → API) into `we
 - **Claude cost:** a few cents per AP email read in full (Opus 5.5: $4 input / $20 output per million tokens), plus one small filtering call per run.
 - **Statement checks:** these search the mailbox only. Yardi isn't connected.
 - **Auto-forward:** Graph forwards the original email with its attachments. Emails flagged for bank or remittance changes, or containing instructions aimed at the assistant, are never forwarded automatically.
-- **Who receives the report:** only addresses on the `app_users` list. Anything else in *Report recipients* is skipped.
+- **Who receives the summary:** only people with access to that client, plus admins. Anything else in *Send the summary to* is skipped.
+- **Many clients at the same time:** the scheduler starts one client every 5 minutes, so up to 24 clients can share a run time. Stagger run times if you have more.
 
 ## Keeping the rules in step
 

@@ -1,6 +1,7 @@
 // AP Inbox Triage runner.
-//   POST {"mode":"tick"}    from pg_cron every 5 min (header x-cron-secret) - runs only when the schedule says so
-//   POST {"mode":"manual"}  from the console's "Run now" (user's Supabase token) - runs immediately
+//   POST {"mode":"tick"}                    from pg_cron every 5 min (header x-cron-secret) - starts the next client that is due
+//   POST {"mode":"manual","client_id":...}  from the console's "Check inbox now" (user's Supabase token) - runs that client now
+// Each call runs at most one client, so every run gets the function's full time limit.
 // The run continues in the background after the response; progress is written to the runs table.
 import { createClient } from "npm:@supabase/supabase-js@2.117.3";
 import { forwardMessage, getBodyText, getPdfAttachments, listInbox, searchMailbox, sendHtmlMail, type MailSummary } from "../_shared/graph.ts";
@@ -23,7 +24,7 @@ const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
 
 interface Settings {
-  enabled: boolean; timezone: string; days: string[]; run_time: string; mailbox: string;
+  id: string; name: string; enabled: boolean; timezone: string; days: string[]; run_time: string; mailbox: string;
   lookback_days: number; smart_ap_address: string; auto_forward: boolean; report_recipients: string[];
 }
 
@@ -41,7 +42,7 @@ async function isDue(s: Settings): Promise<{ due: boolean; reason: string }> {
   const [h, m] = s.run_time.split(":").map(Number);
   const target = h * 60 + m;
   if (now.minutes < target || now.minutes > target + 120) return { due: false, reason: "not run time" };
-  const { data } = await db.from("runs").select("started_at").eq("trigger", "schedule")
+  const { data } = await db.from("runs").select("started_at").eq("client_id", s.id).eq("trigger", "schedule")
     .gte("started_at", new Date(Date.now() - 30 * 3600_000).toISOString());
   if ((data ?? []).some((r) => localParts(s.timezone, new Date(r.started_at)).ymd === now.ymd)) {
     return { due: false, reason: "already ran today" };
@@ -49,8 +50,8 @@ async function isDue(s: Settings): Promise<{ due: boolean; reason: string }> {
   return { due: true, reason: "due" };
 }
 
-async function runningNow(): Promise<boolean> {
-  const { data } = await db.from("runs").select("id").eq("status", "running")
+async function runningNow(clientId: string): Promise<boolean> {
+  const { data } = await db.from("runs").select("id").eq("client_id", clientId).eq("status", "running")
     .gte("started_at", new Date(Date.now() - 15 * 60_000).toISOString()).limit(1);
   return !!data?.length;
 }
@@ -68,8 +69,11 @@ const PRIO_ORDER = { high: 0, medium: 1, low: 2 } as const;
 const toAmount = (s: string) => { const n = Number(String(s).replace(/[^0-9.\-]/g, "")); return s && Number.isFinite(n) ? n : null; };
 
 async function recipients(s: Settings, requestedBy: string): Promise<string[]> {
-  const { data: users } = await db.from("app_users").select("email,is_admin");
-  const members = new Set((users ?? []).map((u) => u.email));
+  const [{ data: users }, { data: access }] = await Promise.all([
+    db.from("app_users").select("email,is_admin"),
+    db.from("client_users").select("email").eq("client_id", s.id),
+  ]);
+  const members = new Set([...(users ?? []).filter((u) => u.is_admin), ...(access ?? [])].map((u) => u.email));
   let to = (s.report_recipients ?? []).map((e) => e.toLowerCase()).filter((e) => members.has(e));
   if (!to.length && requestedBy) to = [requestedBy];
   if (!to.length) to = (users ?? []).filter((u) => u.is_admin).map((u) => u.email);
@@ -79,7 +83,7 @@ async function recipients(s: Settings, requestedBy: string): Promise<string[]> {
 async function doRun(runId: string, trigger: "schedule" | "manual", s: Settings, requestedBy: string) {
   const notes: string[] = [];
   try {
-    if (!s.mailbox) throw new Error("No mailbox is set. Choose one in the console's Schedule tab.");
+    if (!s.mailbox) throw new Error(`No mailbox is set for ${s.name}. Add one on its Settings tab.`);
     const since = new Date(Date.now() - s.lookback_days * 86400_000);
     const all = (await listInbox(s.mailbox, since.toISOString())).filter((m) => !/^(\[Manual\] )?AP Triage /.test(m.subject));
     const picked = await pickApCandidates(all);
@@ -154,12 +158,12 @@ async function doRun(runId: string, trigger: "schedule" | "manual", s: Settings,
     const dateLabel = new Intl.DateTimeFormat("en-GB", { timeZone: s.timezone, day: "numeric", month: "short", year: "numeric" }).format(new Date());
     const ignored: Record<string, number> = notAp ? { "Not AP": notAp } : {};
     const report = {
-      dateLabel, mailbox: s.mailbox, trigger, reviewed: all.length, apCount: items.length,
+      dateLabel, client: s.name, mailbox: s.mailbox, trigger, reviewed: all.length, apCount: items.length,
       periodLabel: `last ${s.lookback_days} day${s.lookback_days === 1 ? "" : "s"}`,
       ignored, items, notes, smartAp: s.smart_ap_address,
     };
     const to = await recipients(s, requestedBy);
-    if (!to.length) throw new Error("No report recipient. Add yourself under Report recipients, or mark an app user as admin.");
+    if (!to.length) throw new Error("No one to send the summary to. Add someone with access to this client under 'Send the summary to'.");
     await sendHtmlMail(s.mailbox, to, reportSubject(report), buildReportHtml(report));
 
     if (items.length) {
@@ -184,7 +188,7 @@ async function doRun(runId: string, trigger: "schedule" | "manual", s: Settings,
     try {
       const to = await recipients(s, requestedBy);
       if (s.mailbox && to.length) {
-        await sendHtmlMail(s.mailbox, to, "AP Triage — run failed", `<p>The AP Inbox Triage run failed:</p><p><b>${message.replace(/</g, "&lt;")}</b></p>`);
+        await sendHtmlMail(s.mailbox, to, `AP Triage · ${s.name} — check failed`, `<p>The AP inbox check for <b>${s.name.replace(/</g, "&lt;")}</b> failed:</p><p><b>${message.replace(/</g, "&lt;")}</b></p>`);
       }
     } catch { /* the run row already holds the error */ }
   }
@@ -198,6 +202,7 @@ Deno.serve(async (req) => {
   if (!mode) return json({ error: 'mode must be "tick" or "manual"' }, 400);
 
   let requestedBy = "";
+  let clientId = "";
   if (mode === "tick") {
     const secret = Deno.env.get("CRON_SECRET");
     if (!secret || req.headers.get("x-cron-secret") !== secret) return json({ error: "Not allowed" }, 401);
@@ -206,26 +211,41 @@ Deno.serve(async (req) => {
     const { data, error } = await db.auth.getUser(jwt);
     const email = data?.user?.email?.toLowerCase();
     if (error || !email) return json({ error: "Sign in first" }, 401);
-    const { data: member } = await db.from("app_users").select("email").eq("email", email).maybeSingle();
-    if (!member) return json({ error: "Your account isn't on the AP Triage user list" }, 403);
+    clientId = String(body.client_id ?? "");
+    if (!clientId) return json({ error: "Pick a client first" }, 400);
+    const [{ data: member }, { data: access }] = await Promise.all([
+      db.from("app_users").select("is_admin").eq("email", email).maybeSingle(),
+      db.from("client_users").select("email").eq("client_id", clientId).eq("email", email).maybeSingle(),
+    ]);
+    if (!member || (!member.is_admin && !access)) return json({ error: "You don't have access to this client" }, 403);
     requestedBy = email;
   }
 
-  const { data: s, error: sErr } = await db.from("settings").select("*").eq("id", 1).single();
-  if (sErr || !s) return json({ error: "Settings row missing" }, 500);
-  const settings = s as Settings;
-
-  if (mode === "tick") {
-    const { due, reason } = await isDue(settings);
-    if (!due) return json({ ran: false, reason });
+  let settings: Settings;
+  if (mode === "manual") {
+    const { data: c } = await db.from("clients").select("*").eq("id", clientId).maybeSingle();
+    if (!c) return json({ error: "Client not found" }, 404);
+    settings = c as Settings;
+    if (await runningNow(settings.id)) return json({ ran: false, reason: "This client is already being checked" }, 409);
+  } else {
+    const { data: clients, error: cErr } = await db.from("clients").select("*").eq("enabled", true).order("run_time").order("name");
+    if (cErr) return json({ error: `Couldn't load clients: ${cErr.message}` }, 500);
+    let next: Settings | null = null;
+    const skipped: Record<string, string> = {};
+    for (const c of (clients ?? []) as Settings[]) {
+      const { due, reason } = await isDue(c);
+      if (due && !(await runningNow(c.id))) { next = c; break; }
+      skipped[c.name] = due ? "already running" : reason;
+    }
+    if (!next) return json({ ran: false, skipped });
+    settings = next;
   }
-  if (await runningNow()) return json({ ran: false, reason: "A run is already in progress" }, 409);
 
   const trigger = mode === "tick" ? "schedule" : "manual";
   const { data: run, error: rErr } = await db.from("runs")
-    .insert({ trigger, mailbox: settings.mailbox, requested_by: requestedBy }).select("id").single();
+    .insert({ client_id: settings.id, trigger, mailbox: settings.mailbox, requested_by: requestedBy }).select("id").single();
   if (rErr || !run) return json({ error: `Couldn't start the run: ${rErr?.message}` }, 500);
 
   EdgeRuntime.waitUntil(doRun(run.id, trigger, settings, requestedBy));
-  return json({ ran: true, runId: run.id, trigger }, 202);
+  return json({ ran: true, runId: run.id, client: settings.name, trigger }, 202);
 });

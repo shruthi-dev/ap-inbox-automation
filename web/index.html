@@ -79,6 +79,10 @@ input[type=text], input[type=email], input[type=number], input[type=time], selec
 .empty { color: var(--muted); padding: 18px; text-align: center; }
 .status-line { font-size: .88rem; color: var(--muted); min-height: 1.4em; }
 .login { max-width: 420px; margin: 8vh auto 0; }
+.clientbar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
+.clientbar .field { flex: 1 1 260px; }
+.clientbar select { font-weight: 600; }
+#peopleBox { border-top: 1px solid var(--line); padding-top: 18px; }
 </style>
 </head>
 <body>
@@ -104,8 +108,18 @@ input[type=text], input[type=email], input[type=number], input[type=time], selec
     </form>
   </section>
 
+  <section class="panel" id="noClients" hidden>
+    <h2>No clients yet</h2>
+    <p class="help">You haven't been given access to any client. Ask an admin to add you to one.</p>
+  </section>
+
   <div id="app" hidden>
-    <section class="strip" aria-label="Status">
+    <section class="clientbar" aria-label="Client">
+      <div class="field"><label for="clientSel">Client</label><select id="clientSel"></select></div>
+      <button class="btn" id="addClientBtn" type="button" hidden>+ Add client</button>
+    </section>
+
+    <section class="strip" aria-label="Status" style="margin-top:16px">
       <div><span class="eyebrow">Daily check</span><span class="val" id="sSched">—</span></div>
       <div><span class="eyebrow">Next check</span><span class="val" id="sNext">—</span></div>
       <div><span class="eyebrow">Last check</span><span class="val" id="sLast">—</span></div>
@@ -139,8 +153,11 @@ input[type=text], input[type=email], input[type=number], input[type=time], selec
     </section>
 
     <section class="panel" id="panel-schedule" hidden style="margin-top:20px">
-      <div><h2>Settings</h2><p class="help">The inbox is checked once a day at the time you set, on the days you pick.</p></div>
+      <div><h2 id="settingsTitle">Settings</h2><p class="help">The inbox is checked once a day at the time you set, on the days you pick.</p></div>
       <form id="settingsForm" novalidate>
+        <fieldset><legend>Client</legend>
+          <div class="field"><label for="fName">Client name</label><input type="text" id="fName" placeholder="e.g. Acme Properties" maxlength="80"></div>
+        </fieldset>
         <fieldset><legend>Daily check</legend><label class="check"><input type="checkbox" id="fEnabled"> Check the inbox automatically</label></fieldset>
         <fieldset><legend>When</legend>
           <div class="days" role="group" aria-label="Days" id="fDays"></div>
@@ -153,15 +170,29 @@ input[type=text], input[type=email], input[type=number], input[type=time], selec
         </fieldset>
         <fieldset><legend>Mailbox</legend>
           <div class="field"><label for="fMailbox">Mailbox to check</label><input type="email" id="fMailbox" placeholder="ap@yourcompany.com"><p class="help">Your own address or a shared AP mailbox. IT must have given the app access to it.</p></div>
-          <div class="field"><label for="fRecipients">Send the summary to</label><input type="text" id="fRecipients" placeholder="you@company.com, colleague@company.com"><p class="help">Separate addresses with commas. Only people who can sign in here receive it; others are skipped.</p></div>
+          <div class="field"><label for="fRecipients">Send the summary to</label><input type="text" id="fRecipients" placeholder="you@company.com, colleague@company.com"><p class="help">Separate addresses with commas. Only people with access to this client (and admins) receive it; others are skipped.</p></div>
         </fieldset>
         <fieldset><legend>Forwarding</legend>
           <div class="field"><label for="fSmartAp">Smart AP inbox address</label><input type="email" id="fSmartAp" placeholder="Not set yet"></div>
           <label class="check"><input type="checkbox" id="fAutoForward"> Forward invoices to Smart AP automatically, with attachments</label>
           <p class="help">Invoices flagged for bank or remittance changes are never forwarded automatically.</p>
         </fieldset>
-        <div class="row"><span class="status-line" id="saveMsg" aria-live="polite"></span><button class="btn primary" type="submit" id="saveBtn">Save settings</button></div>
+        <div class="row"><span class="status-line" id="saveMsg" aria-live="polite"></span>
+          <div class="row"><button class="btn" type="button" id="cancelCreate" hidden>Cancel</button><button class="btn primary" type="submit" id="saveBtn">Save settings</button></div></div>
       </form>
+
+      <fieldset id="peopleBox"><legend>People with access</legend>
+        <p class="help" id="peopleHelp">These people can see this client, check its inbox and change its settings. Admins see every client.</p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Name</th><th>Email</th><th></th></tr></thead>
+          <tbody id="peopleBody"><tr><td colspan="3" class="empty">No one yet.</td></tr></tbody>
+        </table></div>
+        <form id="addPersonForm" class="grid2" novalidate hidden>
+          <div class="field"><label for="pEmail">Work email</label><input type="email" id="pEmail" placeholder="colleague@contractio.com"></div>
+          <div class="field"><label for="pName">Name</label><input type="text" id="pName" placeholder="Optional"></div>
+          <div class="row"><span class="status-line" id="peopleMsg" aria-live="polite"></span><button class="btn" type="submit">Give access</button></div>
+        </form>
+      </fieldset>
     </section>
 
     <section class="panel" id="panel-history" hidden style="margin-top:20px">
@@ -194,7 +225,12 @@ input[type=text], input[type=email], input[type=number], input[type=time], selec
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const money = (n) => n == null ? "—" : "$" + Number(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const cls = (v) => ({ "in progress": "progress", "not started": "notstarted" }[String(v).toLowerCase()] || String(v).toLowerCase());
-  let settings = null;
+  let settings = null;   // the selected client
+  let clients = [];
+  let me = null;         // { email, is_admin }
+  let creating = false;  // the Settings form is filling in a new client
+  const NEW_CLIENT = { name: "", enabled: false, timezone: "Asia/Kolkata", days: ["Mon", "Tue", "Wed", "Thu", "Fri"], run_time: "08:00",
+    mailbox: "", lookback_days: 7, smart_ap_address: "", auto_forward: false, report_recipients: [] };
 
   function banner(kind, text) { const b = $("banner"); b.hidden = !kind; if (kind) { b.className = "notice " + kind; b.textContent = text; } }
 
@@ -246,27 +282,99 @@ input[type=text], input[type=email], input[type=number], input[type=time], selec
   sb.auth.getSession().then(({ data }) => render(data.session));
 
   async function render(session) {
-    $("loginPanel").hidden = !!session; $("app").hidden = !session; $("userBox").hidden = !session;
+    $("loginPanel").hidden = !!session; $("app").hidden = !session; $("userBox").hidden = !session; $("noClients").hidden = true;
     if (!session) { banner(null); return; }
     $("userEmail").textContent = session.user.email;
-    const { data: me } = await sb.from("app_users").select("email").eq("email", session.user.email.toLowerCase()).maybeSingle();
-    if (!me) { $("app").hidden = true; banner("bad", "You don't have access yet. Ask an admin to add " + session.user.email + "."); return; }
-    banner(null);
-    await loadAll();
+    const { data } = await sb.from("app_users").select("email,is_admin").eq("email", session.user.email.toLowerCase()).maybeSingle();
+    if (!data) { $("app").hidden = true; banner("bad", "You don't have access yet. Ask an admin to add " + session.user.email + "."); return; }
+    me = data; banner(null);
+    $("addClientBtn").hidden = !me.is_admin; $("addPersonForm").hidden = !me.is_admin;
+    await loadClients();
   }
+
+  // ---------- clients ----------
+  const savedClient = () => { try { return localStorage.getItem("apClient"); } catch (e) { return null; } };
+  async function loadClients(selectId) {
+    const { data, error } = await sb.from("clients").select("*").order("name");
+    if (error) { banner("bad", "Couldn't load clients: " + error.message); return; }
+    clients = data || [];
+    if (!clients.length) {
+      if (me.is_admin) { $("app").hidden = false; startCreate(); return; }
+      $("app").hidden = true; $("noClients").hidden = false; return;
+    }
+    $("app").hidden = false;
+    const want = selectId || (settings && settings.id) || savedClient();
+    const prev = settings && settings.id;
+    settings = clients.find((c) => c.id === want) || clients[0];
+    if (settings.id !== prev) clearRunMsg();
+    $("clientSel").innerHTML = clients.map((c) => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join("");
+    $("clientSel").value = settings.id; $("clientSel").disabled = false;
+    try { localStorage.setItem("apClient", settings.id); } catch (e) {}
+    creating = false; await loadAll();
+  }
+  $("clientSel").addEventListener("change", () => loadClients($("clientSel").value));
+
+  function startCreate() {
+    creating = true; settings = { ...NEW_CLIENT };
+    $("clientSel").disabled = true;
+    if (!clients.length) $("clientSel").innerHTML = "<option>New client</option>";
+    fillForm(); resetRuns(); clearRunMsg(); renderStrip([]); renderPeople([]);
+    $("runNowBtn").disabled = true; showTab("schedule"); $("fName").focus();
+  }
+  $("addClientBtn").addEventListener("click", startCreate);
+  $("cancelCreate").addEventListener("click", () => loadClients());
 
   // ---------- data ----------
   async function loadAll() {
-    const [s, runs, tracker] = await Promise.all([
-      sb.from("settings").select("*").eq("id", 1).single(),
-      sb.from("runs").select("*").order("started_at", { ascending: false }).limit(60),
+    const [runs, tracker, people] = await Promise.all([
+      sb.from("runs").select("*").eq("client_id", settings.id).order("started_at", { ascending: false }).limit(60),
       sb.from("tracker_items").select("*").order("sort"),
+      sb.from("client_users").select("email").eq("client_id", settings.id),
     ]);
-    if (s.error) { banner("bad", "Couldn't load settings: " + s.error.message); return; }
-    settings = s.data; fillForm(); renderStrip(runs.data || []);
+    $("runNowBtn").disabled = false;
+    fillForm(); renderStrip(runs.data || []); resetRuns();
     renderHistory(runs.data || []); renderRollout(tracker.data || []);
+    await renderPeople((people.data || []).map((p) => p.email));
     await renderOverview((runs.data || [])[0]);
   }
+
+  function resetRuns() {
+    $("ovMeta").textContent = "The inbox hasn't been checked yet.";
+    ["kActions", "kOpen", "kPast", "kReviewed"].forEach((k) => ($(k).textContent = "—"));
+    $("ovItems").innerHTML = '<tr><td colspan="7" class="empty">Items that need action appear here after each check.</td></tr>';
+    $("ovFoot").hidden = true;
+    $("histBody").innerHTML = '<tr><td colspan="8" class="empty">No checks yet.</td></tr>';
+  }
+  function clearRunMsg() { $("runNowMsg").textContent = ""; if ($("refreshRuns")) $("refreshRuns").remove(); }
+
+  // ---------- people with access ----------
+  async function renderPeople(emails) {
+    $("peopleBox").hidden = creating;
+    if (!emails.length) { $("peopleBody").innerHTML = '<tr><td colspan="3" class="empty">No one yet. Admins can still see this client.</td></tr>'; return; }
+    const { data: users } = await sb.from("app_users").select("email,full_name").in("email", emails);
+    const names = Object.fromEntries((users || []).map((u) => [u.email, u.full_name]));
+    $("peopleBody").innerHTML = emails.sort().map((e) => `<tr><td>${esc(names[e] || "—")}</td><td class="num">${esc(e)}</td>
+      <td class="r">${me.is_admin ? `<button class="btn" type="button" data-remove="${esc(e)}">Remove</button>` : ""}</td></tr>`).join("");
+    $("peopleBody").querySelectorAll("[data-remove]").forEach((b) => b.addEventListener("click", async () => {
+      const { error } = await sb.from("client_users").delete().eq("client_id", settings.id).eq("email", b.dataset.remove);
+      $("peopleMsg").textContent = error ? "Not removed: " + error.message : "Removed " + b.dataset.remove + ".";
+      if (!error) loadAll();
+    }));
+  }
+
+  $("addPersonForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const email = $("pEmail").value.trim().toLowerCase(); const name = $("pName").value.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return ($("peopleMsg").textContent = "Enter a valid work email.");
+    $("peopleMsg").textContent = "Saving…";
+    const u = await sb.from("app_users").upsert({ email, full_name: name }, { onConflict: "email", ignoreDuplicates: true });
+    if (u.error) return ($("peopleMsg").textContent = "Not saved: " + u.error.message);
+    const { error } = await sb.from("client_users").upsert({ client_id: settings.id, email }, { onConflict: "client_id,email", ignoreDuplicates: true });
+    if (error) return ($("peopleMsg").textContent = "Not saved: " + error.message);
+    $("pEmail").value = ""; $("pName").value = "";
+    $("peopleMsg").textContent = `${email} can now sign in and see ${settings.name}.`;
+    loadAll();
+  });
 
   function renderStrip(runs) {
     $("sSched").innerHTML = settings.enabled ? '<span class="pill on">On</span>' : '<span class="pill off">Off</span>';
@@ -311,6 +419,11 @@ input[type=text], input[type=email], input[type=number], input[type=time], selec
   }
 
   function fillForm() {
+    $("fName").value = settings.name;
+    $("settingsTitle").textContent = creating ? "New client" : "Settings";
+    $("saveBtn").textContent = creating ? "Create client" : "Save settings";
+    $("cancelCreate").hidden = !creating || !clients.length;
+    $("saveMsg").textContent = "";
     $("fEnabled").checked = settings.enabled;
     DAYS.forEach((d) => ($("d" + d).checked = settings.days.includes(d)));
     $("fTime").value = settings.run_time.slice(0, 5); $("fTz").value = settings.timezone;
@@ -324,33 +437,41 @@ input[type=text], input[type=email], input[type=number], input[type=time], selec
     const okEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
     const days = DAYS.filter((d) => $("d" + d).checked);
     const recipients = $("fRecipients").value.split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
-    const mailbox = $("fMailbox").value.trim(); const smart = $("fSmartAp").value.trim();
+    const mailbox = $("fMailbox").value.trim(); const smart = $("fSmartAp").value.trim(); const name = $("fName").value.trim();
+    if (!name) return ($("saveMsg").textContent = "Give the client a name.");
     if (!mailbox || !okEmail(mailbox)) return ($("saveMsg").textContent = "Enter the mailbox address to check.");
     if (recipients.some((r) => !okEmail(r)) || (smart && !okEmail(smart))) return ($("saveMsg").textContent = "One of the email addresses isn't valid.");
     if ($("fEnabled").checked && !days.length) return ($("saveMsg").textContent = "Pick at least one day, or turn the daily check off.");
     if ($("fAutoForward").checked && !smart) return ($("saveMsg").textContent = "Set the Smart AP address before turning on auto-forward.");
     $("saveBtn").disabled = true; $("saveMsg").textContent = "Saving…";
-    const { data, error } = await sb.from("settings").update({
-      enabled: $("fEnabled").checked, days, run_time: $("fTime").value || "08:00", timezone: $("fTz").value,
+    const row = {
+      name, enabled: $("fEnabled").checked, days, run_time: $("fTime").value || "08:00", timezone: $("fTz").value,
       lookback_days: Math.min(30, Math.max(1, parseInt($("fLookback").value, 10) || 7)),
       mailbox, report_recipients: recipients, smart_ap_address: smart, auto_forward: $("fAutoForward").checked,
-    }).eq("id", 1).select().single();
+    };
+    const { data, error } = creating
+      ? await sb.from("clients").insert(row).select().single()
+      : await sb.from("clients").update(row).eq("id", settings.id).select().single();
     $("saveBtn").disabled = false;
-    if (error) { $("saveMsg").textContent = "Not saved: " + error.message; return; }
-    settings = data; renderStrip([]); loadAll();
-    $("saveMsg").textContent = "Saved. " + (settings.enabled ? "Next check: " + (nextRun(settings) || "no matching day") + "." : "The daily check is off.");
+    if (error) {
+      $("saveMsg").textContent = error.code === "23505" ? "There's already a client called " + name + "." : "Not saved: " + error.message; return;
+    }
+    const wasCreating = creating;
+    await loadClients(data.id);
+    $("saveMsg").textContent = (wasCreating ? name + " created. Add the people who should see it below. " : "Saved. ")
+      + (data.enabled ? "Next check: " + (nextRun(data) || "no matching day") + "." : "The daily check is off.");
   });
 
   $("runNowBtn").addEventListener("click", async () => {
     $("runNowBtn").disabled = true; $("runNowMsg").textContent = "Starting the check…";
-    const { data, error } = await sb.functions.invoke("triage", { body: { mode: "manual" } });
+    const { data, error } = await sb.functions.invoke("triage", { body: { mode: "manual", client_id: settings.id } });
     $("runNowBtn").disabled = false;
     if (error) {
       let msg = error.message;
       try { const b = await error.context.json(); if (b && b.error) msg = b.error; if (b && b.reason) msg = b.reason; } catch (e) {}
       $("runNowMsg").textContent = "Couldn't start the check: " + msg; return;
     }
-    $("runNowMsg").textContent = "Checking the inbox. The summary arrives by email in a few minutes; press Refresh to update this page.";
+    $("runNowMsg").textContent = `Checking ${settings.name}'s inbox. The summary arrives by email in a few minutes; press Refresh to update this page.`;
     if (!$("refreshRuns")) {
       const b = document.createElement("button"); b.className = "btn"; b.id = "refreshRuns"; b.type = "button"; b.textContent = "Refresh";
       b.addEventListener("click", loadAll); $("runNowMsg").after(b);
