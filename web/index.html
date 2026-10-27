@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>AP Triage Console</title>
+<title>AP Inbox Assistant</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Instrument+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -85,9 +85,9 @@ input[type=text], input[type=email], input[type=number], input[type=time], selec
 <div class="wrap">
   <header class="top">
     <div>
-      <div class="eyebrow">Accounts payable · Outlook</div>
-      <h1>AP Triage Console</h1>
-      <p>Schedule the inbox triage, see each run's results, and track the rollout.</p>
+      <div class="eyebrow">ContractIO · Accounts payable</div>
+      <h1>AP Inbox Assistant</h1>
+      <p>Reads the AP mailbox, picks out what needs action, and emails you a daily summary.</p>
     </div>
     <div class="row" id="userBox" hidden><span class="muted" id="userEmail"></span><button class="btn" id="signOut" type="button">Sign out</button></div>
   </header>
@@ -105,59 +105,59 @@ input[type=text], input[type=email], input[type=number], input[type=time], selec
   </section>
 
   <div id="app" hidden>
-    <section class="strip" aria-label="Scheduler status">
-      <div><span class="eyebrow">Scheduler</span><span class="val" id="sSched">—</span></div>
-      <div><span class="eyebrow">Next run</span><span class="val" id="sNext">—</span></div>
-      <div><span class="eyebrow">Last run</span><span class="val" id="sLast">—</span></div>
+    <section class="strip" aria-label="Status">
+      <div><span class="eyebrow">Daily check</span><span class="val" id="sSched">—</span></div>
+      <div><span class="eyebrow">Next check</span><span class="val" id="sNext">—</span></div>
+      <div><span class="eyebrow">Last check</span><span class="val" id="sLast">—</span></div>
       <div><span class="eyebrow">Mailbox</span><span class="val num" id="sMailbox" style="font-size:.9rem">—</span></div>
     </section>
 
     <nav class="tabs" role="tablist" aria-label="Sections" style="margin-top:20px">
-      <button role="tab" aria-selected="true" data-tab="overview">Overview</button>
-      <button role="tab" aria-selected="false" data-tab="schedule">Schedule</button>
-      <button role="tab" aria-selected="false" data-tab="history">Run history</button>
-      <button role="tab" aria-selected="false" data-tab="rollout">Rollout</button>
+      <button role="tab" aria-selected="true" data-tab="overview">Summary</button>
+      <button role="tab" aria-selected="false" data-tab="schedule">Settings</button>
+      <button role="tab" aria-selected="false" data-tab="history">History</button>
+      <button role="tab" aria-selected="false" data-tab="rollout">Setup checklist</button>
     </nav>
 
     <section class="panel" id="panel-overview" style="margin-top:20px">
       <div class="row">
-        <div><h2>Latest run</h2><div class="muted" id="ovMeta">No runs yet.</div></div>
-        <button class="btn primary" id="runNowBtn" type="button">Run now</button>
+        <div><h2>Latest summary</h2><div class="muted" id="ovMeta">The inbox hasn't been checked yet.</div></div>
+        <button class="btn primary" id="runNowBtn" type="button">Check inbox now</button>
       </div>
       <div class="status-line" id="runNowMsg" aria-live="polite"></div>
       <div class="strip">
-        <div><span class="eyebrow">Actions</span><span class="val num" id="kActions">—</span></div>
+        <div><span class="eyebrow">Needs action</span><span class="val num" id="kActions">—</span></div>
         <div><span class="eyebrow">Open amount</span><span class="val num" id="kOpen">—</span></div>
-        <div><span class="eyebrow">Likely past due</span><span class="val num" id="kPast">—</span></div>
-        <div><span class="eyebrow">Emails reviewed</span><span class="val num" id="kReviewed">—</span></div>
+        <div><span class="eyebrow">Likely overdue</span><span class="val num" id="kPast">—</span></div>
+        <div><span class="eyebrow">Emails checked</span><span class="val num" id="kReviewed">—</span></div>
       </div>
       <div class="table-wrap"><table>
-        <thead><tr><th class="c">#</th><th class="c">Priority</th><th>Vendor</th><th>What to do</th><th class="r">Amount</th><th class="c">Due</th><th>Status</th></tr></thead>
-        <tbody id="ovItems"><tr><td colspan="7" class="empty">The latest run's action items appear here.</td></tr></tbody>
+        <thead><tr><th class="c">#</th><th class="c">Priority</th><th>Vendor</th><th>Next step</th><th class="r">Amount</th><th class="c">Due</th><th>Status</th></tr></thead>
+        <tbody id="ovItems"><tr><td colspan="7" class="empty">Items that need action appear here after each check.</td></tr></tbody>
         <tfoot id="ovFoot" hidden><tr><td colspan="4" class="r">Total open</td><td class="r num" id="ovTotal"></td><td colspan="2"></td></tr></tfoot>
       </table></div>
     </section>
 
     <section class="panel" id="panel-schedule" hidden style="margin-top:20px">
-      <div><h2>Schedule and mailbox</h2><p class="help">The scheduler checks every 5 minutes and runs once a day at the time you set, on the days you pick.</p></div>
+      <div><h2>Settings</h2><p class="help">The inbox is checked once a day at the time you set, on the days you pick.</p></div>
       <form id="settingsForm" novalidate>
-        <fieldset><legend>Scheduler</legend><label class="check"><input type="checkbox" id="fEnabled"> Run the triage on a schedule</label></fieldset>
+        <fieldset><legend>Daily check</legend><label class="check"><input type="checkbox" id="fEnabled"> Check the inbox automatically</label></fieldset>
         <fieldset><legend>When</legend>
           <div class="days" role="group" aria-label="Days" id="fDays"></div>
           <div class="grid2">
-            <div class="field"><label for="fTime">Run time</label><input type="time" id="fTime" step="300"></div>
+            <div class="field"><label for="fTime">Time</label><input type="time" id="fTime" step="300"></div>
             <div class="field"><label for="fTz">Time zone</label><select id="fTz">
               <option>Asia/Kolkata</option><option>America/Chicago</option><option>America/New_York</option><option>America/Denver</option><option>America/Los_Angeles</option><option>Europe/London</option><option>UTC</option></select></div>
-            <div class="field"><label for="fLookback">Look back (days)</label><input type="number" id="fLookback" min="1" max="30" step="1"></div>
+            <div class="field"><label for="fLookback">Include emails from the last (days)</label><input type="number" id="fLookback" min="1" max="30" step="1"></div>
           </div>
         </fieldset>
         <fieldset><legend>Mailbox</legend>
-          <div class="field"><label for="fMailbox">Mailbox to check</label><input type="email" id="fMailbox" placeholder="ap@yourcompany.com"><p class="help">Your own address or a shared AP mailbox. The app registration must be allowed to read it.</p></div>
-          <div class="field"><label for="fRecipients">Report recipients</label><input type="text" id="fRecipients" placeholder="you@company.com, colleague@company.com"><p class="help">Comma-separated. Only people on the app's user list receive the report; anyone else is skipped.</p></div>
+          <div class="field"><label for="fMailbox">Mailbox to check</label><input type="email" id="fMailbox" placeholder="ap@yourcompany.com"><p class="help">Your own address or a shared AP mailbox. IT must have given the app access to it.</p></div>
+          <div class="field"><label for="fRecipients">Send the summary to</label><input type="text" id="fRecipients" placeholder="you@company.com, colleague@company.com"><p class="help">Separate addresses with commas. Only people who can sign in here receive it; others are skipped.</p></div>
         </fieldset>
-        <fieldset><legend>Routing</legend>
+        <fieldset><legend>Forwarding</legend>
           <div class="field"><label for="fSmartAp">Smart AP inbox address</label><input type="email" id="fSmartAp" placeholder="Not set yet"></div>
-          <label class="check"><input type="checkbox" id="fAutoForward"> Forward invoices to Smart AP automatically (with attachments)</label>
+          <label class="check"><input type="checkbox" id="fAutoForward"> Forward invoices to Smart AP automatically, with attachments</label>
           <p class="help">Invoices flagged for bank or remittance changes are never forwarded automatically.</p>
         </fieldset>
         <div class="row"><span class="status-line" id="saveMsg" aria-live="polite"></span><button class="btn primary" type="submit" id="saveBtn">Save settings</button></div>
@@ -165,15 +165,15 @@ input[type=text], input[type=email], input[type=number], input[type=time], selec
     </section>
 
     <section class="panel" id="panel-history" hidden style="margin-top:20px">
-      <div><h2>Run history</h2><p class="help">Newest first, in your schedule's time zone.</p></div>
+      <div><h2>History</h2><p class="help">Every inbox check, newest first, in your chosen time zone.</p></div>
       <div class="table-wrap"><table>
-        <thead><tr><th>Started</th><th>Trigger</th><th>Result</th><th class="r">Emails</th><th class="r">AP</th><th class="r">Actions</th><th class="r">Open amount</th><th class="c">Report</th></tr></thead>
-        <tbody id="histBody"><tr><td colspan="8" class="empty">No runs recorded yet.</td></tr></tbody>
+        <thead><tr><th>Started</th><th>Started by</th><th>Result</th><th class="r">Emails</th><th class="r">AP emails</th><th class="r">Actions</th><th class="r">Open amount</th><th class="c">Summary sent</th></tr></thead>
+        <tbody id="histBody"><tr><td colspan="8" class="empty">No checks yet.</td></tr></tbody>
       </table></div>
     </section>
 
     <section class="panel" id="panel-rollout" hidden style="margin-top:20px">
-      <div class="row"><div><h2>Rollout tracker</h2><p class="help">Changes save as soon as you pick a status.</p></div><span class="muted num" id="rollSummary"></span></div>
+      <div class="row"><div><h2>Setup checklist</h2><p class="help">Changes save as soon as you pick a status.</p></div><span class="muted num" id="rollSummary"></span></div>
       <div class="table-wrap"><table>
         <thead><tr><th>Item</th><th>Status</th><th>Notes</th></tr></thead>
         <tbody id="rollBody"><tr><td colspan="3" class="empty">Loading…</td></tr></tbody>
@@ -250,7 +250,7 @@ input[type=text], input[type=email], input[type=number], input[type=time], selec
     if (!session) { banner(null); return; }
     $("userEmail").textContent = session.user.email;
     const { data: me } = await sb.from("app_users").select("email").eq("email", session.user.email.toLowerCase()).maybeSingle();
-    if (!me) { $("app").hidden = true; banner("bad", "Your account isn't on the AP Triage user list. Ask an admin to add " + session.user.email + "."); return; }
+    if (!me) { $("app").hidden = true; banner("bad", "You don't have access yet. Ask an admin to add " + session.user.email + "."); return; }
     banner(null);
     await loadAll();
   }
@@ -270,19 +270,19 @@ input[type=text], input[type=email], input[type=number], input[type=time], selec
 
   function renderStrip(runs) {
     $("sSched").innerHTML = settings.enabled ? '<span class="pill on">On</span>' : '<span class="pill off">Off</span>';
-    $("sNext").textContent = settings.enabled ? (nextRun(settings) || "No days selected") : "Paused";
-    $("sLast").textContent = runs[0] ? fmt(runs[0].started_at) : "None yet";
+    $("sNext").textContent = settings.enabled ? (nextRun(settings) || "No days selected") : "Off";
+    $("sLast").textContent = runs[0] ? fmt(runs[0].started_at) : "Not yet";
     $("sMailbox").textContent = settings.mailbox || "Not set";
   }
 
   async function renderOverview(run) {
     if (!run) return;
-    $("ovMeta").textContent = `${run.trigger === "schedule" ? "Scheduled" : "Manual"} run · ${fmt(run.started_at)} · ${run.status}` + (run.error ? " — " + run.error : "");
+    $("ovMeta").textContent = `${run.trigger === "schedule" ? "Daily check" : "Checked by hand"} · ${fmt(run.started_at)} · ${run.status}` + (run.error ? " — " + run.error : "");
     $("kActions").textContent = run.actions; $("kOpen").textContent = money(run.open_amount);
     $("kPast").textContent = run.past_due; $("kReviewed").textContent = `${run.emails_reviewed} (${run.ap_emails} AP)`;
     const { data: items } = await sb.from("run_items").select("*").eq("run_id", run.id).order("position");
     if (!items || !items.length) {
-      $("ovItems").innerHTML = `<tr><td colspan="7" class="empty">${run.status === "running" ? "This run is still in progress." : run.status === "failed" ? "This run failed." : "Nothing needed attention."}</td></tr>`;
+      $("ovItems").innerHTML = `<tr><td colspan="7" class="empty">${run.status === "running" ? "Still checking the inbox…" : run.status === "failed" ? "This check didn't finish." : "Nothing needed attention."}</td></tr>`;
       $("ovFoot").hidden = true; return;
     }
     $("ovItems").innerHTML = items.map((i) => `<tr><td class="c num">${i.position}</td><td class="c"><span class="pill ${i.priority}">${esc(i.priority[0].toUpperCase() + i.priority.slice(1))}</span></td>
@@ -293,7 +293,7 @@ input[type=text], input[type=email], input[type=number], input[type=time], selec
 
   function renderHistory(runs) {
     if (!runs.length) return;
-    $("histBody").innerHTML = runs.map((r) => `<tr><td class="num">${fmt(r.started_at)}</td><td>${r.trigger === "schedule" ? "Scheduled" : "Manual"}</td>
+    $("histBody").innerHTML = runs.map((r) => `<tr><td class="num">${fmt(r.started_at)}</td><td>${r.trigger === "schedule" ? "Daily check" : "By hand"}</td>
       <td><span class="pill ${r.status}">${esc(r.status)}</span>${r.error ? `<div class="muted" style="font-size:.82rem">${esc(r.error)}</div>` : ""}</td>
       <td class="r num">${r.emails_reviewed}</td><td class="r num">${r.ap_emails}</td><td class="r num">${r.actions}</td>
       <td class="r num">${money(r.open_amount)}</td><td class="c">${r.report_sent ? "Sent" : "—"}</td></tr>`).join("");
@@ -327,7 +327,7 @@ input[type=text], input[type=email], input[type=number], input[type=time], selec
     const mailbox = $("fMailbox").value.trim(); const smart = $("fSmartAp").value.trim();
     if (!mailbox || !okEmail(mailbox)) return ($("saveMsg").textContent = "Enter the mailbox address to check.");
     if (recipients.some((r) => !okEmail(r)) || (smart && !okEmail(smart))) return ($("saveMsg").textContent = "One of the email addresses isn't valid.");
-    if ($("fEnabled").checked && !days.length) return ($("saveMsg").textContent = "Pick at least one day, or turn the scheduler off.");
+    if ($("fEnabled").checked && !days.length) return ($("saveMsg").textContent = "Pick at least one day, or turn the daily check off.");
     if ($("fAutoForward").checked && !smart) return ($("saveMsg").textContent = "Set the Smart AP address before turning on auto-forward.");
     $("saveBtn").disabled = true; $("saveMsg").textContent = "Saving…";
     const { data, error } = await sb.from("settings").update({
@@ -338,21 +338,21 @@ input[type=text], input[type=email], input[type=number], input[type=time], selec
     $("saveBtn").disabled = false;
     if (error) { $("saveMsg").textContent = "Not saved: " + error.message; return; }
     settings = data; renderStrip([]); loadAll();
-    $("saveMsg").textContent = "Saved. " + (settings.enabled ? "Next run: " + (nextRun(settings) || "no matching day") + "." : "The scheduler is off.");
+    $("saveMsg").textContent = "Saved. " + (settings.enabled ? "Next check: " + (nextRun(settings) || "no matching day") + "." : "The daily check is off.");
   });
 
   $("runNowBtn").addEventListener("click", async () => {
-    $("runNowBtn").disabled = true; $("runNowMsg").textContent = "Starting a run…";
+    $("runNowBtn").disabled = true; $("runNowMsg").textContent = "Starting the check…";
     const { data, error } = await sb.functions.invoke("triage", { body: { mode: "manual" } });
     $("runNowBtn").disabled = false;
     if (error) {
       let msg = error.message;
       try { const b = await error.context.json(); if (b && b.error) msg = b.error; if (b && b.reason) msg = b.reason; } catch (e) {}
-      $("runNowMsg").textContent = "Couldn't start the run: " + msg; return;
+      $("runNowMsg").textContent = "Couldn't start the check: " + msg; return;
     }
-    $("runNowMsg").textContent = "Run started. The report arrives by email in a few minutes; press Refresh results to update this page.";
+    $("runNowMsg").textContent = "Checking the inbox. The summary arrives by email in a few minutes; press Refresh to update this page.";
     if (!$("refreshRuns")) {
-      const b = document.createElement("button"); b.className = "btn"; b.id = "refreshRuns"; b.type = "button"; b.textContent = "Refresh results";
+      const b = document.createElement("button"); b.className = "btn"; b.id = "refreshRuns"; b.type = "button"; b.textContent = "Refresh";
       b.addEventListener("click", loadAll); $("runNowMsg").after(b);
     }
     loadAll();
