@@ -180,6 +180,7 @@ async function doRun(runId: string, trigger: "schedule" | "manual", s: Settings,
       actions: items.filter((i) => i.status !== "No action" && !i.forwarded).length,
       open_amount: items.reduce((a, i) => a + (i.amount ?? 0), 0),
       past_due: items.filter((i) => i.past_due).length, report_sent: true, forwarded,
+      notes: [...notes, ...(notAp ? [`Not AP, ignored: ${notAp}.`] : [])],
     }).eq("id", runId);
   } catch (e) {
     const message = (e as Error).message ?? String(e);
@@ -243,7 +244,7 @@ Deno.serve(async (req) => {
 
   const trigger = mode === "tick" ? "schedule" : "manual";
   const { data: run, error: rErr } = await db.from("runs")
-    .insert({ client_id: settings.id, trigger, mailbox: settings.mailbox, requested_by: requestedBy }).select("id").single();
+    .insert({ client_id: settings.id, trigger, mailbox: settings.mailbox, requested_by: requestedBy, lookback_days: settings.lookback_days }).select("id").single();
   if (rErr || !run) return json({ error: `Couldn't start the run: ${rErr?.message}` }, 500);
 
   EdgeRuntime.waitUntil(doRun(run.id, trigger, settings, requestedBy));

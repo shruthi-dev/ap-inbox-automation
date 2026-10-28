@@ -27,7 +27,7 @@
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5;
   padding: 28px max(16px, env(safe-area-inset-right, 0px)) 48px max(16px, env(safe-area-inset-left, 0px)); }
-.wrap { max-width: 1040px; margin: 0 auto; display: grid; gap: 20px; }
+.wrap { max-width: 1200px; margin: 0 auto; display: grid; gap: 20px; }
 h1, h2 { font-family: var(--font-display); margin: 0; text-wrap: balance; }
 h1 { font-size: 1.9rem; } h2 { font-size: 1.25rem; }
 .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
@@ -79,10 +79,31 @@ input[type=text], input[type=email], input[type=number], input[type=time], selec
 .empty { color: var(--muted); padding: 18px; text-align: center; }
 .status-line { font-size: .88rem; color: var(--muted); min-height: 1.4em; }
 .login { max-width: 420px; margin: 8vh auto 0; }
-.clientbar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
-.clientbar .field { flex: 1 1 260px; }
-.clientbar select { font-weight: 600; }
-#peopleBox { border-top: 1px solid var(--line); padding-top: 18px; }
+.layout { display: grid; grid-template-columns: 232px minmax(0, 1fr); gap: 24px; align-items: start; }
+.sidebar { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 10px; position: sticky; top: 16px; }
+.clientlist { display: grid; gap: 2px; }
+.navitem { font: inherit; text-align: left; background: none; border: 0; border-left: 3px solid transparent; border-radius: 6px; padding: 8px 10px; color: var(--ink); cursor: pointer; overflow-wrap: anywhere; width: 100%; }
+.navitem:hover { background: var(--bg); }
+.navitem[aria-current="true"] { background: var(--bg); border-left-color: var(--accent); font-weight: 600; }
+.navitem .sub { display: block; font-size: .78rem; color: var(--muted); font-weight: 400; }
+.sidefoot { border-top: 1px solid var(--line); padding-top: 10px; }
+.main { display: grid; gap: 16px; min-width: 0; align-content: start; }
+.clienthead { display: grid; gap: 2px; }
+.clienthead h2 { font-size: 1.5rem; }
+@media (max-width: 760px) { .layout { grid-template-columns: 1fr; } .sidebar { position: static; } }
+h3 { font-family: var(--font-display); font-size: 1.02rem; margin: 0 0 8px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.btn.small { padding: 4px 10px; font-size: .85rem; white-space: nowrap; }
+tr.item.open td { border-bottom-color: transparent; }
+tr.detail > td { background: var(--bg); padding: 14px 16px 18px; }
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 16px; margin: 0; }
+.facts dt { font-weight: 600; color: var(--muted); font-size: .85rem; padding-top: 1px; }
+.facts dd { margin: 0; overflow-wrap: anywhere; }
+.detail h4 { font-size: .85rem; margin: 14px 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.detail table { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.missing { color: var(--bad); font-weight: 600; } .found { color: var(--good); font-weight: 600; }
+.notes { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+@media (max-width: 560px) { .facts { grid-template-columns: 1fr; } .facts dd { margin-bottom: 6px; } }
 </style>
 </head>
 <body>
@@ -113,104 +134,131 @@ input[type=text], input[type=email], input[type=number], input[type=time], selec
     <p class="help">You haven't been given access to any client. Ask an admin to add you to one.</p>
   </section>
 
-  <div id="app" hidden>
-    <section class="clientbar" aria-label="Client">
-      <div class="field"><label for="clientSel">Client</label><select id="clientSel"></select></div>
+  <div id="app" class="layout" hidden>
+    <aside class="sidebar" aria-label="Clients">
+      <div class="eyebrow">Clients</div>
+      <nav class="clientlist" id="clientList" aria-label="Client list"></nav>
       <button class="btn" id="addClientBtn" type="button" hidden>+ Add client</button>
-    </section>
+      <div class="sidefoot"><button class="navitem" id="checklistBtn" type="button">Setup checklist</button></div>
+    </aside>
 
-    <section class="strip" aria-label="Status" style="margin-top:16px">
-      <div><span class="eyebrow">Daily check</span><span class="val" id="sSched">—</span></div>
-      <div><span class="eyebrow">Next check</span><span class="val" id="sNext">—</span></div>
-      <div><span class="eyebrow">Last check</span><span class="val" id="sLast">—</span></div>
-      <div><span class="eyebrow">Mailbox</span><span class="val num" id="sMailbox" style="font-size:.9rem">—</span></div>
-    </section>
+    <main class="main">
+      <!-- One client: its status and its own tabs -->
+      <div id="clientView" class="main" hidden>
+        <div class="clienthead">
+          <h2 id="cName">—</h2>
+          <div class="muted num" id="sMailbox">—</div>
+        </div>
 
-    <nav class="tabs" role="tablist" aria-label="Sections" style="margin-top:20px">
-      <button role="tab" aria-selected="true" data-tab="overview">Summary</button>
-      <button role="tab" aria-selected="false" data-tab="schedule">Settings</button>
-      <button role="tab" aria-selected="false" data-tab="history">History</button>
-      <button role="tab" aria-selected="false" data-tab="rollout">Setup checklist</button>
-    </nav>
+        <section class="strip" aria-label="Status">
+          <div><span class="eyebrow">Daily check</span><span class="val" id="sSched">—</span></div>
+          <div><span class="eyebrow">Next check</span><span class="val" id="sNext">—</span></div>
+          <div><span class="eyebrow">Last check</span><span class="val" id="sLast">—</span></div>
+        </section>
 
-    <section class="panel" id="panel-overview" style="margin-top:20px">
-      <div class="row">
-        <div><h2>Latest summary</h2><div class="muted" id="ovMeta">The inbox hasn't been checked yet.</div></div>
-        <button class="btn primary" id="runNowBtn" type="button">Check inbox now</button>
-      </div>
-      <div class="status-line" id="runNowMsg" aria-live="polite"></div>
-      <div class="strip">
-        <div><span class="eyebrow">Needs action</span><span class="val num" id="kActions">—</span></div>
-        <div><span class="eyebrow">Open amount</span><span class="val num" id="kOpen">—</span></div>
-        <div><span class="eyebrow">Likely overdue</span><span class="val num" id="kPast">—</span></div>
-        <div><span class="eyebrow">Emails checked</span><span class="val num" id="kReviewed">—</span></div>
-      </div>
-      <div class="table-wrap"><table>
-        <thead><tr><th class="c">#</th><th class="c">Priority</th><th>Vendor</th><th>Next step</th><th class="r">Amount</th><th class="c">Due</th><th>Status</th></tr></thead>
-        <tbody id="ovItems"><tr><td colspan="7" class="empty">Items that need action appear here after each check.</td></tr></tbody>
-        <tfoot id="ovFoot" hidden><tr><td colspan="4" class="r">Total open</td><td class="r num" id="ovTotal"></td><td colspan="2"></td></tr></tfoot>
-      </table></div>
-    </section>
+        <nav class="tabs" role="tablist" aria-label="Client sections">
+          <button role="tab" aria-selected="true" data-tab="overview">Summary</button>
+          <button role="tab" aria-selected="false" data-tab="schedule">Settings</button>
+          <button role="tab" aria-selected="false" data-tab="people">People</button>
+          <button role="tab" aria-selected="false" data-tab="history">History</button>
+        </nav>
 
-    <section class="panel" id="panel-schedule" hidden style="margin-top:20px">
-      <div><h2 id="settingsTitle">Settings</h2><p class="help">The inbox is checked once a day at the time you set, on the days you pick.</p></div>
-      <form id="settingsForm" novalidate>
-        <fieldset><legend>Client</legend>
-          <div class="field"><label for="fName">Client name</label><input type="text" id="fName" placeholder="e.g. Acme Properties" maxlength="80"></div>
-        </fieldset>
-        <fieldset><legend>Daily check</legend><label class="check"><input type="checkbox" id="fEnabled"> Check the inbox automatically</label></fieldset>
-        <fieldset><legend>When</legend>
-          <div class="days" role="group" aria-label="Days" id="fDays"></div>
-          <div class="grid2">
-            <div class="field"><label for="fTime">Time</label><input type="time" id="fTime" step="300"></div>
-            <div class="field"><label for="fTz">Time zone</label><select id="fTz">
-              <option>Asia/Kolkata</option><option>America/Chicago</option><option>America/New_York</option><option>America/Denver</option><option>America/Los_Angeles</option><option>Europe/London</option><option>UTC</option></select></div>
-            <div class="field"><label for="fLookback">Include emails from the last (days)</label><input type="number" id="fLookback" min="1" max="30" step="1"></div>
+        <section class="panel" id="panel-overview">
+          <div class="row">
+            <div><h2 id="ovTitle">Latest summary</h2><div class="muted" id="ovMeta">The inbox hasn't been checked yet.</div>
+              <div class="muted" id="ovScope" style="font-size:.88rem"></div></div>
+            <button class="btn primary" id="runNowBtn" type="button">Check inbox now</button>
           </div>
-        </fieldset>
-        <fieldset><legend>Mailbox</legend>
-          <div class="field"><label for="fMailbox">Mailbox to check</label><input type="email" id="fMailbox" placeholder="ap@yourcompany.com"><p class="help">Your own address or a shared AP mailbox. IT must have given the app access to it.</p></div>
-          <div class="field"><label for="fRecipients">Send the summary to</label><input type="text" id="fRecipients" placeholder="you@company.com, colleague@company.com"><p class="help">Separate addresses with commas. Only people with access to this client (and admins) receive it; others are skipped.</p></div>
-        </fieldset>
-        <fieldset><legend>Forwarding</legend>
-          <div class="field"><label for="fSmartAp">Smart AP inbox address</label><input type="email" id="fSmartAp" placeholder="Not set yet"></div>
-          <label class="check"><input type="checkbox" id="fAutoForward"> Forward invoices to Smart AP automatically, with attachments</label>
-          <p class="help">Invoices flagged for bank or remittance changes are never forwarded automatically.</p>
-        </fieldset>
-        <div class="row"><span class="status-line" id="saveMsg" aria-live="polite"></span>
-          <div class="row"><button class="btn" type="button" id="cancelCreate" hidden>Cancel</button><button class="btn primary" type="submit" id="saveBtn">Save settings</button></div></div>
-      </form>
+          <div class="notice info row" id="ovViewing" hidden><span id="ovViewingText"></span><button class="btn" type="button" id="ovLatest">Back to latest</button></div>
+          <div class="status-line" id="runNowMsg" aria-live="polite"></div>
+          <div class="strip">
+            <div><span class="eyebrow">Needs action</span><span class="val num" id="kActions">—</span></div>
+            <div><span class="eyebrow">Open amount</span><span class="val num" id="kOpen">—</span></div>
+            <div><span class="eyebrow">Likely overdue</span><span class="val num" id="kPast">—</span></div>
+            <div><span class="eyebrow">Emails checked</span><span class="val num" id="kReviewed">—</span></div>
+          </div>
+          <div class="row" id="ovTools" hidden><span class="help">Open a row to see the full detail from the summary email.</span>
+            <button class="btn" type="button" id="ovExpand" aria-pressed="false">Show all details</button></div>
+          <div class="table-wrap"><table>
+            <thead><tr><th class="c">#</th><th class="c">Priority</th><th>Vendor</th><th>Category</th><th>Next step</th><th class="r">Amount</th><th class="c">Due</th><th>Status</th><th><span class="sr">Details</span></th></tr></thead>
+            <tbody id="ovItems"><tr><td colspan="9" class="empty">Items that need action appear here after each check.</td></tr></tbody>
+            <tfoot id="ovFoot" hidden><tr><td colspan="5" class="r">Total open</td><td class="r num" id="ovTotal"></td><td colspan="3"></td></tr></tfoot>
+          </table></div>
+          <div id="ovNotesBox" hidden><h3>Notes</h3><ul class="notes" id="ovNotes"></ul></div>
+        </section>
 
-      <fieldset id="peopleBox"><legend>People with access</legend>
-        <p class="help" id="peopleHelp">These people can see this client, check its inbox and change its settings. Admins see every client.</p>
-        <div class="table-wrap"><table>
-          <thead><tr><th>Name</th><th>Email</th><th></th></tr></thead>
-          <tbody id="peopleBody"><tr><td colspan="3" class="empty">No one yet.</td></tr></tbody>
-        </table></div>
-        <form id="addPersonForm" class="grid2" novalidate hidden>
-          <div class="field"><label for="pEmail">Work email</label><input type="email" id="pEmail" placeholder="colleague@contractio.com"></div>
-          <div class="field"><label for="pName">Name</label><input type="text" id="pName" placeholder="Optional"></div>
-          <div class="row"><span class="status-line" id="peopleMsg" aria-live="polite"></span><button class="btn" type="submit">Give access</button></div>
+        <section class="panel" id="panel-schedule" hidden>
+          <div><h2>Settings</h2><p class="help">The inbox is checked once a day at the time you set, on the days you pick.</p></div>
+          <form id="settingsForm" novalidate>
+            <fieldset><legend>Client</legend>
+              <div class="field"><label for="fName">Client name</label><input type="text" id="fName" maxlength="80"></div>
+            </fieldset>
+            <fieldset><legend>Mailbox</legend>
+              <div class="field"><label for="fMailbox">Mailbox to check</label><input type="email" id="fMailbox" placeholder="ap@yourcompany.com"><p class="help">Your own address or a shared AP mailbox. IT must have given the app access to it.</p></div>
+              <div class="field"><label for="fRecipients">Send the summary to</label><input type="text" id="fRecipients" placeholder="you@company.com, colleague@company.com"><p class="help">Separate addresses with commas. Only people with access to this client (and admins) receive it; others are skipped.</p></div>
+            </fieldset>
+            <fieldset><legend>Daily check</legend><label class="check"><input type="checkbox" id="fEnabled"> Check the inbox automatically</label>
+              <div class="days" role="group" aria-label="Days" id="fDays"></div>
+              <div class="grid2">
+                <div class="field"><label for="fTime">Time</label><input type="time" id="fTime" step="300"></div>
+                <div class="field"><label for="fTz">Time zone</label><select id="fTz">
+                  <option>Asia/Kolkata</option><option>America/Chicago</option><option>America/New_York</option><option>America/Denver</option><option>America/Los_Angeles</option><option>Europe/London</option><option>UTC</option></select></div>
+                <div class="field"><label for="fLookback">Include emails from the last (days)</label><input type="number" id="fLookback" min="1" max="30" step="1"></div>
+              </div>
+            </fieldset>
+            <fieldset><legend>Forwarding</legend>
+              <div class="field"><label for="fSmartAp">Smart AP inbox address</label><input type="email" id="fSmartAp" placeholder="Not set yet"></div>
+              <label class="check"><input type="checkbox" id="fAutoForward"> Forward invoices to Smart AP automatically, with attachments</label>
+              <p class="help">Invoices flagged for bank or remittance changes are never forwarded automatically.</p>
+            </fieldset>
+            <div class="row"><span class="status-line" id="saveMsg" aria-live="polite"></span><button class="btn primary" type="submit" id="saveBtn">Save settings</button></div>
+          </form>
+        </section>
+
+        <section class="panel" id="panel-people" hidden>
+          <div><h2>People with access</h2><p class="help">These people can see this client, check its inbox and change its settings. Admins see every client.</p></div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Name</th><th>Email</th><th></th></tr></thead>
+            <tbody id="peopleBody"><tr><td colspan="3" class="empty">No one yet.</td></tr></tbody>
+          </table></div>
+          <form id="addPersonForm" class="grid2" novalidate hidden>
+            <div class="field"><label for="pEmail">Work email</label><input type="email" id="pEmail" placeholder="colleague@contractio.com"></div>
+            <div class="field"><label for="pName">Name</label><input type="text" id="pName" placeholder="Optional"></div>
+            <div class="row"><span class="status-line" id="peopleMsg" aria-live="polite"></span><button class="btn primary" type="submit">Give access</button></div>
+          </form>
+          <p class="help" id="peopleNoAdmin">Only admins can give or remove access.</p>
+        </section>
+
+        <section class="panel" id="panel-history" hidden>
+          <div><h2>History</h2><p class="help">Every inbox check, newest first, in this client's time zone.</p></div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Started</th><th>Started by</th><th>Result</th><th class="r">Emails</th><th class="r">AP emails</th><th class="r">Actions</th><th class="r">Open amount</th><th class="c">Summary sent</th><th><span class="sr">Open</span></th></tr></thead>
+            <tbody id="histBody"><tr><td colspan="9" class="empty">No checks yet.</td></tr></tbody>
+          </table></div>
+        </section>
+      </div>
+
+      <!-- Add a client -->
+      <section class="panel" id="newClientView" hidden>
+        <div><h2>Add a client</h2><p class="help">Start with a name and the mailbox to check. You'll set the schedule, summary recipients and Smart AP next.</p></div>
+        <form id="newClientForm" novalidate>
+          <div class="field"><label for="nName">Client name</label><input type="text" id="nName" placeholder="e.g. Acme Properties" maxlength="80"></div>
+          <div class="field"><label for="nMailbox">Mailbox to check</label><input type="email" id="nMailbox" placeholder="ap@yourcompany.com"><p class="help">IT must include this mailbox in the app's mailbox access.</p></div>
+          <div class="row"><span class="status-line" id="newMsg" aria-live="polite"></span>
+            <div class="row"><button class="btn" type="button" id="cancelNew">Cancel</button><button class="btn primary" type="submit" id="createBtn">Create client</button></div></div>
         </form>
-      </fieldset>
-    </section>
+      </section>
 
-    <section class="panel" id="panel-history" hidden style="margin-top:20px">
-      <div><h2>History</h2><p class="help">Every inbox check, newest first, in your chosen time zone.</p></div>
-      <div class="table-wrap"><table>
-        <thead><tr><th>Started</th><th>Started by</th><th>Result</th><th class="r">Emails</th><th class="r">AP emails</th><th class="r">Actions</th><th class="r">Open amount</th><th class="c">Summary sent</th></tr></thead>
-        <tbody id="histBody"><tr><td colspan="8" class="empty">No checks yet.</td></tr></tbody>
-      </table></div>
-    </section>
-
-    <section class="panel" id="panel-rollout" hidden style="margin-top:20px">
-      <div class="row"><div><h2>Setup checklist</h2><p class="help">Changes save as soon as you pick a status.</p></div><span class="muted num" id="rollSummary"></span></div>
-      <div class="table-wrap"><table>
-        <thead><tr><th>Item</th><th>Status</th><th>Notes</th></tr></thead>
-        <tbody id="rollBody"><tr><td colspan="3" class="empty">Loading…</td></tr></tbody>
-      </table></div>
-      <div class="status-line" id="rollMsg" aria-live="polite"></div>
-    </section>
+      <!-- Company-wide setup checklist -->
+      <section class="panel" id="checklistView" hidden>
+        <div class="row"><div><h2>Setup checklist</h2><p class="help">Company-wide setup steps. Changes save as soon as you pick a status.</p></div><span class="muted num" id="rollSummary"></span></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Item</th><th>Status</th><th>Notes</th></tr></thead>
+          <tbody id="rollBody"><tr><td colspan="3" class="empty">Loading…</td></tr></tbody>
+        </table></div>
+        <div class="status-line" id="rollMsg" aria-live="polite"></div>
+      </section>
+    </main>
   </div>
 </div>
 
@@ -222,15 +270,19 @@ input[type=text], input[type=email], input[type=number], input[type=time], selec
   const cfg = window.AP_CONFIG || {};
   const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
   const STATUSES = ["Done", "In progress", "Blocked", "Not started"];
+  const TABS = ["overview", "schedule", "people", "history"];
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const money = (n) => n == null ? "—" : "$" + Number(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const cls = (v) => ({ "in progress": "progress", "not started": "notstarted" }[String(v).toLowerCase()] || String(v).toLowerCase());
+  const okEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
   let settings = null;   // the selected client
   let clients = [];
   let me = null;         // { email, is_admin }
-  let creating = false;  // the Settings form is filling in a new client
-  const NEW_CLIENT = { name: "", enabled: false, timezone: "Asia/Kolkata", days: ["Mon", "Tue", "Wed", "Thu", "Fri"], run_time: "08:00",
-    mailbox: "", lookback_days: 7, smart_ap_address: "", auto_forward: false, report_recipients: [] };
+  let view = "client";   // "client" | "new" | "checklist"
+  let runList = [];      // the selected client's checks, newest first
+  const NEW_CLIENT = { enabled: false, timezone: "Asia/Kolkata", days: ["Mon", "Tue", "Wed", "Thu", "Fri"], run_time: "08:00",
+    lookback_days: 7, smart_ap_address: "", auto_forward: false };
+  const store = { get: (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} } };
 
   function banner(kind, text) { const b = $("banner"); b.hidden = !kind; if (kind) { b.className = "notice " + kind; b.textContent = text; } }
 
@@ -240,7 +292,7 @@ input[type=text], input[type=email], input[type=number], input[type=time], selec
   }
   const sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
 
-  // ---------- formatting in the schedule's time zone ----------
+  // ---------- formatting in the client's time zone ----------
   const tz = () => (settings && settings.timezone) || "Asia/Kolkata";
   const fmt = (iso) => iso ? new Intl.DateTimeFormat("en-GB", { timeZone: tz(), weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }).format(new Date(iso)) : "—";
   function nextRun(s) {
@@ -256,15 +308,22 @@ input[type=text], input[type=email], input[type=number], input[type=time], selec
     return null;
   }
 
-  // ---------- tabs ----------
+  // ---------- views and tabs ----------
+  function showView(v) {
+    view = v;
+    $("clientView").hidden = v !== "client"; $("newClientView").hidden = v !== "new"; $("checklistView").hidden = v !== "checklist";
+    $("checklistBtn").setAttribute("aria-current", String(v === "checklist"));
+    renderClientList();
+  }
   const tabs = [...document.querySelectorAll("nav.tabs button")];
   function showTab(name) {
+    if (!TABS.includes(name)) name = "overview";
     tabs.forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === name)));
-    ["overview", "schedule", "history", "rollout"].forEach((t) => ($("panel-" + t).hidden = t !== name));
-    try { localStorage.setItem("apTab", name); } catch (e) {}
+    TABS.forEach((t) => ($("panel-" + t).hidden = t !== name));
+    store.set("apTab", name);
   }
   tabs.forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
-  try { const t = localStorage.getItem("apTab"); if (t && $("panel-" + t)) showTab(t); } catch (e) {}
+  showTab(store.get("apTab"));
   $("fDays").innerHTML = DAYS.map((d) => `<label><input type="checkbox" id="d${d}" value="${d}"> ${d}</label>`).join("");
 
   // ---------- auth ----------
@@ -288,68 +347,175 @@ input[type=text], input[type=email], input[type=number], input[type=time], selec
     const { data } = await sb.from("app_users").select("email,is_admin").eq("email", session.user.email.toLowerCase()).maybeSingle();
     if (!data) { $("app").hidden = true; banner("bad", "You don't have access yet. Ask an admin to add " + session.user.email + "."); return; }
     me = data; banner(null);
-    $("addClientBtn").hidden = !me.is_admin; $("addPersonForm").hidden = !me.is_admin;
+    $("addClientBtn").hidden = !me.is_admin; $("addPersonForm").hidden = !me.is_admin; $("peopleNoAdmin").hidden = me.is_admin;
     await loadClients();
   }
 
   // ---------- clients ----------
-  const savedClient = () => { try { return localStorage.getItem("apClient"); } catch (e) { return null; } };
+  function renderClientList() {
+    $("clientList").innerHTML = clients.length
+      ? clients.map((c) => `<button class="navitem" type="button" data-id="${esc(c.id)}" aria-current="${String(view === "client" && !!settings && c.id === settings.id)}">
+          ${esc(c.name)}<span class="sub">${c.enabled ? "Daily check on" : "Daily check off"}</span></button>`).join("")
+      : '<p class="help">No clients yet.</p>';
+    $("clientList").querySelectorAll("[data-id]").forEach((b) => b.addEventListener("click", () => loadClients(b.dataset.id)));
+  }
+
   async function loadClients(selectId) {
     const { data, error } = await sb.from("clients").select("*").order("name");
     if (error) { banner("bad", "Couldn't load clients: " + error.message); return; }
     clients = data || [];
     if (!clients.length) {
-      if (me.is_admin) { $("app").hidden = false; startCreate(); return; }
+      if (me.is_admin) { $("app").hidden = false; settings = null; openNewClient(); return; }
       $("app").hidden = true; $("noClients").hidden = false; return;
     }
     $("app").hidden = false;
-    const want = selectId || (settings && settings.id) || savedClient();
+    const want = selectId || (settings && settings.id) || store.get("apClient");
     const prev = settings && settings.id;
     settings = clients.find((c) => c.id === want) || clients[0];
     if (settings.id !== prev) clearRunMsg();
-    $("clientSel").innerHTML = clients.map((c) => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join("");
-    $("clientSel").value = settings.id; $("clientSel").disabled = false;
-    try { localStorage.setItem("apClient", settings.id); } catch (e) {}
-    creating = false; await loadAll();
+    store.set("apClient", settings.id);
+    showView("client");
+    await loadAll();
   }
-  $("clientSel").addEventListener("change", () => loadClients($("clientSel").value));
 
-  function startCreate() {
-    creating = true; settings = { ...NEW_CLIENT };
-    $("clientSel").disabled = true;
-    if (!clients.length) $("clientSel").innerHTML = "<option>New client</option>";
-    fillForm(); resetRuns(); clearRunMsg(); renderStrip([]); renderPeople([]);
-    $("runNowBtn").disabled = true; showTab("schedule"); $("fName").focus();
+  function openNewClient() {
+    $("nName").value = ""; $("nMailbox").value = ""; $("newMsg").textContent = "";
+    $("cancelNew").hidden = !clients.length;
+    showView("new"); $("nName").focus();
   }
-  $("addClientBtn").addEventListener("click", startCreate);
-  $("cancelCreate").addEventListener("click", () => loadClients());
+  $("addClientBtn").addEventListener("click", openNewClient);
+  $("cancelNew").addEventListener("click", () => showView("client"));
+  $("checklistBtn").addEventListener("click", () => showView("checklist"));
 
-  // ---------- data ----------
+  $("newClientForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const name = $("nName").value.trim(); const mailbox = $("nMailbox").value.trim().toLowerCase();
+    if (!name) return ($("newMsg").textContent = "Give the client a name.");
+    if (!okEmail(mailbox)) return ($("newMsg").textContent = "Enter the mailbox address to check.");
+    $("createBtn").disabled = true; $("newMsg").textContent = "Creating…";
+    const { data, error } = await sb.from("clients").insert({ ...NEW_CLIENT, name, mailbox, report_recipients: [me.email] }).select().single();
+    $("createBtn").disabled = false;
+    if (error) { $("newMsg").textContent = error.code === "23505" ? "There's already a client called " + name + "." : "Not created: " + error.message; return; }
+    await loadClients(data.id);
+    showTab("schedule");
+    $("saveMsg").textContent = name + " created. Set the schedule and Smart AP here, then add people on the People tab.";
+  });
+
+  // ---------- data for the selected client ----------
   async function loadAll() {
     const [runs, tracker, people] = await Promise.all([
       sb.from("runs").select("*").eq("client_id", settings.id).order("started_at", { ascending: false }).limit(60),
       sb.from("tracker_items").select("*").order("sort"),
       sb.from("client_users").select("email").eq("client_id", settings.id),
     ]);
-    $("runNowBtn").disabled = false;
-    fillForm(); renderStrip(runs.data || []); resetRuns();
-    renderHistory(runs.data || []); renderRollout(tracker.data || []);
+    $("cName").textContent = settings.name; $("sMailbox").textContent = settings.mailbox || "No mailbox set";
+    runList = runs.data || [];
+    fillForm(); renderStrip(runList); resetRuns();
+    renderHistory(runList); renderRollout(tracker.data || []);
     await renderPeople((people.data || []).map((p) => p.email));
-    await renderOverview((runs.data || [])[0]);
+    await renderOverview(runList[0]);
   }
 
   function resetRuns() {
-    $("ovMeta").textContent = "The inbox hasn't been checked yet.";
+    $("ovTitle").textContent = "Latest summary"; $("ovViewing").hidden = true;
+    $("ovMeta").textContent = "The inbox hasn't been checked yet."; $("ovScope").textContent = "";
     ["kActions", "kOpen", "kPast", "kReviewed"].forEach((k) => ($(k).textContent = "—"));
-    $("ovItems").innerHTML = '<tr><td colspan="7" class="empty">Items that need action appear here after each check.</td></tr>';
-    $("ovFoot").hidden = true;
-    $("histBody").innerHTML = '<tr><td colspan="8" class="empty">No checks yet.</td></tr>';
+    $("ovItems").innerHTML = '<tr><td colspan="9" class="empty">Items that need action appear here after each check.</td></tr>';
+    $("ovFoot").hidden = true; $("ovTools").hidden = true; $("ovNotesBox").hidden = true;
+    $("histBody").innerHTML = '<tr><td colspan="9" class="empty">No checks yet.</td></tr>';
   }
   function clearRunMsg() { $("runNowMsg").textContent = ""; if ($("refreshRuns")) $("refreshRuns").remove(); }
 
+  function renderStrip(runs) {
+    $("sSched").innerHTML = settings.enabled ? '<span class="pill on">On</span>' : '<span class="pill off">Off</span>';
+    $("sNext").textContent = settings.enabled ? (nextRun(settings) || "No days selected") : "Off";
+    $("sLast").textContent = runs[0] ? fmt(runs[0].started_at) : "Not yet";
+  }
+
+  const CAT = { invoice: "Invoice", utility_bill: "Utility / portal bill", vendor_info: "Vendor information", account_statement: "Account statement", other: "Other" };
+
+  function itemDetail(i) {
+    const facts = [
+      ["Why", esc(i.why)],
+      ["Email", `"${esc(i.subject)}" from ${esc(i.sender)}${i.received_at ? ", " + esc(fmt(i.received_at)) : ""}${i.web_link ? ` · <a href="${esc(i.web_link)}" target="_blank" rel="noopener">Open email</a>` : ""}`],
+      i.key_facts && ["Key facts", esc(i.key_facts)],
+      i.contact && ["Contact", esc(i.contact)],
+      i.category === "invoice" && settings.smart_ap_address && !/forwarded/i.test(i.status) && ["Forward to", esc(settings.smart_ap_address)],
+    ].filter(Boolean);
+    const lines = i.statement || [];
+    const statement = lines.length ? `<h4>Statement reconciliation</h4><div class="table-wrap"><table>
+      <thead><tr><th>Invoice #</th><th class="c">Date</th><th>Description</th><th class="r">Amount</th><th>Status</th></tr></thead>
+      <tbody>${lines.map((l) => `<tr><td class="num">${esc(l.invoice_number)}</td><td class="c num">${esc(l.date)}</td><td>${esc(l.description)}</td>
+        <td class="r num">${esc(l.amount)}</td><td>${l.found ? '<span class="found">Found</span>' : '<span class="missing">Missing</span>'} <span class="muted">${esc(l.evidence)}</span></td></tr>`).join("")}</tbody>
+      </table></div>` : "";
+    return `<dl class="facts">${facts.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>${statement}`;
+  }
+
+  function toggleRow(btn, open) {
+    const row = btn.closest("tr"); const detail = row.nextElementSibling;
+    detail.hidden = !open; row.classList.toggle("open", open);
+    btn.setAttribute("aria-expanded", String(open)); btn.textContent = open ? "Hide" : "Details";
+  }
+  $("ovExpand").addEventListener("click", () => {
+    const open = $("ovExpand").getAttribute("aria-pressed") !== "true";
+    $("ovItems").querySelectorAll("[data-toggle]").forEach((b) => toggleRow(b, open));
+    $("ovExpand").setAttribute("aria-pressed", String(open)); $("ovExpand").textContent = open ? "Hide all details" : "Show all details";
+  });
+  $("ovLatest").addEventListener("click", () => renderOverview(runList[0]));
+
+  async function renderOverview(run) {
+    if (!run) return;
+    resetRuns(); renderHistory(runList);
+    const latest = run.id === (runList[0] && runList[0].id);
+    $("ovTitle").textContent = latest ? "Latest summary" : "Summary";
+    $("ovViewing").hidden = latest; $("ovViewingText").textContent = latest ? "" : "You're looking at an earlier check from " + fmt(run.started_at) + ".";
+    $("ovMeta").textContent = `${run.trigger === "schedule" ? "Daily check" : "Checked by hand"} · ${fmt(run.started_at)} · ${run.status}` + (run.error ? " — " + run.error : "");
+    $("ovScope").textContent = [run.mailbox, run.lookback_days ? `last ${run.lookback_days} day${run.lookback_days === 1 ? "" : "s"}` : "",
+      `${run.emails_reviewed} emails checked, ${run.ap_emails} AP`, run.requested_by ? "by " + run.requested_by : ""].filter(Boolean).join(" · ");
+    $("kActions").textContent = run.actions; $("kOpen").textContent = money(run.open_amount);
+    $("kPast").textContent = run.past_due; $("kReviewed").textContent = `${run.emails_reviewed} (${run.ap_emails} AP)`;
+    const notes = Array.isArray(run.notes) ? run.notes : [];
+    $("ovNotes").innerHTML = notes.map((n) => `<li>${esc(n)}</li>`).join(""); $("ovNotesBox").hidden = !notes.length;
+    const { data: items } = await sb.from("run_items").select("*").eq("run_id", run.id).order("position");
+    if (!items || !items.length) {
+      $("ovItems").innerHTML = `<tr><td colspan="9" class="empty">${run.status === "running" ? "Still checking the inbox…" : run.status === "failed" ? "This check didn't finish." : "Nothing needed attention."}</td></tr>`;
+      return;
+    }
+    $("ovItems").innerHTML = items.map((i) => `<tr class="item"><td class="c num">${i.position}</td><td class="c"><span class="pill ${i.priority}">${esc(i.priority[0].toUpperCase() + i.priority.slice(1))}</span></td>
+      <td>${esc(i.vendor)}</td><td>${esc(CAT[i.category] || i.category)}</td><td>${esc(i.action)}</td>
+      <td class="r num">${money(i.amount)}</td><td class="c num">${esc(i.due || "—")}</td><td>${esc(i.status)}</td>
+      <td class="r"><button class="btn small" type="button" data-toggle aria-expanded="false" aria-controls="det_${esc(i.id)}">Details</button></td></tr>
+      <tr class="detail" id="det_${esc(i.id)}" hidden><td colspan="9">${itemDetail(i)}</td></tr>`).join("");
+    $("ovItems").querySelectorAll("[data-toggle]").forEach((b) => b.addEventListener("click", () => toggleRow(b, b.getAttribute("aria-expanded") !== "true")));
+    $("ovExpand").setAttribute("aria-pressed", "false"); $("ovExpand").textContent = "Show all details";
+    $("ovTotal").textContent = money(items.reduce((a, i) => a + Number(i.amount || 0), 0)); $("ovFoot").hidden = false; $("ovTools").hidden = false;
+  }
+
+  function renderHistory(runs) {
+    if (!runs.length) return;
+    $("histBody").innerHTML = runs.map((r) => `<tr><td class="num">${fmt(r.started_at)}</td><td>${r.trigger === "schedule" ? "Daily check" : "By hand"}</td>
+      <td><span class="pill ${r.status}">${esc(r.status)}</span>${r.error ? `<div class="muted" style="font-size:.82rem">${esc(r.error)}</div>` : ""}</td>
+      <td class="r num">${r.emails_reviewed}</td><td class="r num">${r.ap_emails}</td><td class="r num">${r.actions}</td>
+      <td class="r num">${money(r.open_amount)}</td><td class="c">${r.report_sent ? "Sent" : "—"}</td>
+      <td class="r"><button class="btn small" type="button" data-run="${esc(r.id)}">View</button></td></tr>`).join("");
+    $("histBody").querySelectorAll("[data-run]").forEach((b) => b.addEventListener("click", () => {
+      showTab("overview"); renderOverview(runList.find((r) => r.id === b.dataset.run));
+    }));
+  }
+
+  function renderRollout(items) {
+    $("rollSummary").textContent = `${items.filter((i) => i.status === "Done").length} of ${items.length} done`;
+    $("rollBody").innerHTML = items.map((it) => `<tr><td>${esc(it.item)}</td><td><select id="t_${esc(it.id)}" data-id="${esc(it.id)}" aria-label="Status for ${esc(it.item)}">
+      ${STATUSES.map((s) => `<option${s === it.status ? " selected" : ""}>${s}</option>`).join("")}</select></td><td class="muted">${esc(it.note)}</td></tr>`).join("");
+    $("rollBody").querySelectorAll("select").forEach((sel) => sel.addEventListener("change", async (e) => {
+      $("rollMsg").textContent = "Saving…";
+      const { error } = await sb.from("tracker_items").update({ status: e.target.value, updated_at: new Date().toISOString() }).eq("id", e.target.dataset.id);
+      $("rollMsg").textContent = error ? "Not saved: " + error.message : "Saved.";
+    }));
+  }
+
   // ---------- people with access ----------
   async function renderPeople(emails) {
-    $("peopleBox").hidden = creating;
     if (!emails.length) { $("peopleBody").innerHTML = '<tr><td colspan="3" class="empty">No one yet. Admins can still see this client.</td></tr>'; return; }
     const { data: users } = await sb.from("app_users").select("email,full_name").in("email", emails);
     const names = Object.fromEntries((users || []).map((u) => [u.email, u.full_name]));
@@ -365,7 +531,7 @@ input[type=text], input[type=email], input[type=number], input[type=time], selec
   $("addPersonForm").addEventListener("submit", async (e) => {
     e.preventDefault();
     const email = $("pEmail").value.trim().toLowerCase(); const name = $("pName").value.trim();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return ($("peopleMsg").textContent = "Enter a valid work email.");
+    if (!okEmail(email)) return ($("peopleMsg").textContent = "Enter a valid work email.");
     $("peopleMsg").textContent = "Saving…";
     const u = await sb.from("app_users").upsert({ email, full_name: name }, { onConflict: "email", ignoreDuplicates: true });
     if (u.error) return ($("peopleMsg").textContent = "Not saved: " + u.error.message);
@@ -376,54 +542,9 @@ input[type=text], input[type=email], input[type=number], input[type=time], selec
     loadAll();
   });
 
-  function renderStrip(runs) {
-    $("sSched").innerHTML = settings.enabled ? '<span class="pill on">On</span>' : '<span class="pill off">Off</span>';
-    $("sNext").textContent = settings.enabled ? (nextRun(settings) || "No days selected") : "Off";
-    $("sLast").textContent = runs[0] ? fmt(runs[0].started_at) : "Not yet";
-    $("sMailbox").textContent = settings.mailbox || "Not set";
-  }
-
-  async function renderOverview(run) {
-    if (!run) return;
-    $("ovMeta").textContent = `${run.trigger === "schedule" ? "Daily check" : "Checked by hand"} · ${fmt(run.started_at)} · ${run.status}` + (run.error ? " — " + run.error : "");
-    $("kActions").textContent = run.actions; $("kOpen").textContent = money(run.open_amount);
-    $("kPast").textContent = run.past_due; $("kReviewed").textContent = `${run.emails_reviewed} (${run.ap_emails} AP)`;
-    const { data: items } = await sb.from("run_items").select("*").eq("run_id", run.id).order("position");
-    if (!items || !items.length) {
-      $("ovItems").innerHTML = `<tr><td colspan="7" class="empty">${run.status === "running" ? "Still checking the inbox…" : run.status === "failed" ? "This check didn't finish." : "Nothing needed attention."}</td></tr>`;
-      $("ovFoot").hidden = true; return;
-    }
-    $("ovItems").innerHTML = items.map((i) => `<tr><td class="c num">${i.position}</td><td class="c"><span class="pill ${i.priority}">${esc(i.priority[0].toUpperCase() + i.priority.slice(1))}</span></td>
-      <td>${esc(i.vendor)}</td><td>${esc(i.action)}${i.web_link ? ` · <a href="${esc(i.web_link)}" target="_blank" rel="noopener">Open email</a>` : ""}</td>
-      <td class="r num">${money(i.amount)}</td><td class="c num">${esc(i.due || "—")}</td><td>${esc(i.status)}</td></tr>`).join("");
-    $("ovTotal").textContent = money(items.reduce((a, i) => a + Number(i.amount || 0), 0)); $("ovFoot").hidden = false;
-  }
-
-  function renderHistory(runs) {
-    if (!runs.length) return;
-    $("histBody").innerHTML = runs.map((r) => `<tr><td class="num">${fmt(r.started_at)}</td><td>${r.trigger === "schedule" ? "Daily check" : "By hand"}</td>
-      <td><span class="pill ${r.status}">${esc(r.status)}</span>${r.error ? `<div class="muted" style="font-size:.82rem">${esc(r.error)}</div>` : ""}</td>
-      <td class="r num">${r.emails_reviewed}</td><td class="r num">${r.ap_emails}</td><td class="r num">${r.actions}</td>
-      <td class="r num">${money(r.open_amount)}</td><td class="c">${r.report_sent ? "Sent" : "—"}</td></tr>`).join("");
-  }
-
-  function renderRollout(items) {
-    $("rollSummary").textContent = `${items.filter((i) => i.status === "Done").length} of ${items.length} done`;
-    $("rollBody").innerHTML = items.map((it) => `<tr><td>${esc(it.item)}</td><td><select id="t_${esc(it.id)}" data-id="${esc(it.id)}" aria-label="Status for ${esc(it.item)}">
-      ${STATUSES.map((s) => `<option${s === it.status ? " selected" : ""}>${s}</option>`).join("")}</select></td><td class="muted">${esc(it.note)}</td></tr>`).join("");
-    $("rollBody").querySelectorAll("select").forEach((sel) => sel.addEventListener("change", async (e) => {
-      $("rollMsg").textContent = "Saving…";
-      const { error } = await sb.from("tracker_items").update({ status: e.target.value, updated_at: new Date().toISOString() }).eq("id", e.target.dataset.id);
-      $("rollMsg").textContent = error ? "Not saved: " + error.message : "Saved.";
-    }));
-  }
-
+  // ---------- settings ----------
   function fillForm() {
-    $("fName").value = settings.name;
-    $("settingsTitle").textContent = creating ? "New client" : "Settings";
-    $("saveBtn").textContent = creating ? "Create client" : "Save settings";
-    $("cancelCreate").hidden = !creating || !clients.length;
-    $("saveMsg").textContent = "";
+    $("fName").value = settings.name; $("saveMsg").textContent = "";
     $("fEnabled").checked = settings.enabled;
     DAYS.forEach((d) => ($("d" + d).checked = settings.days.includes(d)));
     $("fTime").value = settings.run_time.slice(0, 5); $("fTz").value = settings.timezone;
@@ -434,7 +555,6 @@ input[type=text], input[type=email], input[type=number], input[type=time], selec
 
   $("settingsForm").addEventListener("submit", async (e) => {
     e.preventDefault();
-    const okEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
     const days = DAYS.filter((d) => $("d" + d).checked);
     const recipients = $("fRecipients").value.split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
     const mailbox = $("fMailbox").value.trim(); const smart = $("fSmartAp").value.trim(); const name = $("fName").value.trim();
@@ -444,27 +564,21 @@ input[type=text], input[type=email], input[type=number], input[type=time], selec
     if ($("fEnabled").checked && !days.length) return ($("saveMsg").textContent = "Pick at least one day, or turn the daily check off.");
     if ($("fAutoForward").checked && !smart) return ($("saveMsg").textContent = "Set the Smart AP address before turning on auto-forward.");
     $("saveBtn").disabled = true; $("saveMsg").textContent = "Saving…";
-    const row = {
+    const { data, error } = await sb.from("clients").update({
       name, enabled: $("fEnabled").checked, days, run_time: $("fTime").value || "08:00", timezone: $("fTz").value,
       lookback_days: Math.min(30, Math.max(1, parseInt($("fLookback").value, 10) || 7)),
       mailbox, report_recipients: recipients, smart_ap_address: smart, auto_forward: $("fAutoForward").checked,
-    };
-    const { data, error } = creating
-      ? await sb.from("clients").insert(row).select().single()
-      : await sb.from("clients").update(row).eq("id", settings.id).select().single();
+    }).eq("id", settings.id).select().single();
     $("saveBtn").disabled = false;
-    if (error) {
-      $("saveMsg").textContent = error.code === "23505" ? "There's already a client called " + name + "." : "Not saved: " + error.message; return;
-    }
-    const wasCreating = creating;
+    if (error) { $("saveMsg").textContent = error.code === "23505" ? "There's already a client called " + name + "." : "Not saved: " + error.message; return; }
     await loadClients(data.id);
-    $("saveMsg").textContent = (wasCreating ? name + " created. Add the people who should see it below. " : "Saved. ")
-      + (data.enabled ? "Next check: " + (nextRun(data) || "no matching day") + "." : "The daily check is off.");
+    $("saveMsg").textContent = "Saved. " + (data.enabled ? "Next check: " + (nextRun(data) || "no matching day") + "." : "The daily check is off.");
   });
 
+  // ---------- check now ----------
   $("runNowBtn").addEventListener("click", async () => {
     $("runNowBtn").disabled = true; $("runNowMsg").textContent = "Starting the check…";
-    const { data, error } = await sb.functions.invoke("triage", { body: { mode: "manual", client_id: settings.id } });
+    const { error } = await sb.functions.invoke("triage", { body: { mode: "manual", client_id: settings.id } });
     $("runNowBtn").disabled = false;
     if (error) {
       let msg = error.message;
